@@ -58,12 +58,14 @@ from homeassistant.const import (
     EVENT_TIMER_OUT_OF_SYNC,
     LENGTH_METERS,
     MATCH_ALL,
+    MAX_LENGTH_EVENT_TYPE,
     __version__,
 )
 from homeassistant.exceptions import (
     HomeAssistantError,
     InvalidEntityFormatError,
     InvalidStateError,
+    MaxLengthExceeded,
     ServiceNotFound,
     Unauthorized,
 )
@@ -83,6 +85,11 @@ if TYPE_CHECKING:
     from homeassistant.auth import AuthManager
     from homeassistant.components.http import HomeAssistantHTTP
     from homeassistant.config_entries import ConfigEntries
+
+
+STAGE_1_SHUTDOWN_TIMEOUT = 100
+STAGE_2_SHUTDOWN_TIMEOUT = 60
+STAGE_3_SHUTDOWN_TIMEOUT = 30
 
 
 block_async_io.enable()
@@ -526,7 +533,7 @@ class HomeAssistant:
         self.async_track_tasks()
         self.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
         try:
-            async with self.timeout.async_timeout(120):
+            async with self.timeout.async_timeout(STAGE_1_SHUTDOWN_TIMEOUT):
                 await self.async_block_till_done()
         except asyncio.TimeoutError:
             _LOGGER.warning(
@@ -537,7 +544,7 @@ class HomeAssistant:
         self.state = CoreState.final_write
         self.bus.async_fire(EVENT_HOMEASSISTANT_FINAL_WRITE)
         try:
-            async with self.timeout.async_timeout(60):
+            async with self.timeout.async_timeout(STAGE_2_SHUTDOWN_TIMEOUT):
                 await self.async_block_till_done()
         except asyncio.TimeoutError:
             _LOGGER.warning(
@@ -556,7 +563,7 @@ class HomeAssistant:
         shutdown_run_callback_threadsafe(self.loop)
 
         try:
-            async with self.timeout.async_timeout(30):
+            async with self.timeout.async_timeout(STAGE_3_SHUTDOWN_TIMEOUT):
                 await self.async_block_till_done()
         except asyncio.TimeoutError:
             _LOGGER.warning(
@@ -697,6 +704,9 @@ class EventBus:
 
         This method must be run in the event loop.
         """
+        if len(event_type) > MAX_LENGTH_EVENT_TYPE:
+            raise MaxLengthExceeded(event_type, "event_type", MAX_LENGTH_EVENT_TYPE)
+
         listeners = self._listeners.get(event_type, [])
 
         # EVENT_HOMEASSISTANT_CLOSE should go only to his listeners
@@ -774,7 +784,9 @@ class EventBus:
 
         return remove_listener
 
-    def listen_once(self, event_type: str, listener: Callable) -> CALLBACK_TYPE:
+    def listen_once(
+        self, event_type: str, listener: Callable[[Event], None]
+    ) -> CALLBACK_TYPE:
         """Listen once for event of a specific type.
 
         To listen to all events specify the constant ``MATCH_ALL``

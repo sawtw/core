@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Sequence
+from typing import Iterable
 
 import voluptuous as vol
 
@@ -25,7 +25,7 @@ def has_location(state: State) -> bool:
     )
 
 
-def closest(latitude: float, longitude: float, states: Sequence[State]) -> State | None:
+def closest(latitude: float, longitude: float, states: Iterable[State]) -> State | None:
     """Return closest state to point.
 
     Async friendly.
@@ -105,4 +105,4 @@ def find_coordinates(
 def _get_location_from_attributes(entity_state: State) -> str:
     """Get the lat/long string from an entities attributes."""
     attr = entity_state.attributes
-    return "{},{}".format(attr.get(ATTR_LATITUDE), attr.get(ATTR_LONGITUDE))
+    return f"{attr.get(ATTR_LATITUDE)},{attr.get(ATTR_LONGITUDE)}"
